@@ -27,6 +27,10 @@ ui <- dashboardPage(
   # Body of the dashboard
   dashboardBody(
     tags$style(HTML("
+      .table, .table th, .table td {
+        text-align: center;  /* Center content in the table */
+        vertical-align: middle;  /* Vertically align text in the center */
+      }
       .total-patient-text {
         font-size: 30px;  /* Set font size to 30px */
         font-weight: bold; /* Make the text bold */
@@ -60,7 +64,7 @@ ui <- dashboardPage(
       # Second Tab: Hospital Patient Count
       tabItem(tabName = "patient_count",
               fluidRow(
-                box(width = 6,
+                box(width = 12,
                     selectInput("area_patient", "Choose a Hospital Service Area:", 
                                 choices = unique(ny_hospdata$Hospital.Service.Area),
                                 selected = unique(ny_hospdata$Hospital.Service.Area)[1])
@@ -99,19 +103,65 @@ server <- function(input, output, session) {
     # Filter the data for the selected area
     selected_area_data <- filter(ny_hospdata, Hospital.Service.Area == input$area)
     
+    format_large_numbers <- function(x) {
+      if (x >= 1e9) {
+        return(paste0(round(x / 1e9, 2), "B"))  # Convert to billions
+      } else if (x >= 1e6) {
+        return(paste0(round(x / 1e6, 2), "M"))  # Convert to millions
+      } else if (x >= 1e3) {
+        return(paste0(round(x / 1e3, 2), "K"))  # Convert to thousands
+      } else {
+        return(as.character(x))  # Keep the number as is for smaller values
+      }
+    }
+    total_charges_all <- sum(as.numeric(gsub(",", "", ny_hospdata$Total.Charges)), na.rm = TRUE)
     # Create descriptive statistics for Age Group
     age_group_stats <- data.frame(
       Category = c("18–29", "30–49", "50–69", "70+"),
-      N = c(sum(selected_area_data$Age.Group == "18 to 29"),
+      "Patient Count" = c(sum(selected_area_data$Age.Group == "18 to 29"),
             sum(selected_area_data$Age.Group == "30 to 49"),
             sum(selected_area_data$Age.Group == "50 to 69"),
             sum(selected_area_data$Age.Group == "70 or Older")),
-      Percentage = c(
+      'Percentage' = c(
         round(sum(selected_area_data$Age.Group == "18 to 29") / nrow(selected_area_data) * 100, 1),
         round(sum(selected_area_data$Age.Group == "30 to 49") / nrow(selected_area_data) * 100, 1),
         round(sum(selected_area_data$Age.Group == "50 to 69") / nrow(selected_area_data) * 100, 1),
         round(sum(selected_area_data$Age.Group == "70 or Older") / nrow(selected_area_data) * 100, 1)
+      ),
+      'Average Length of Stay' = c(
+        mean(selected_area_data$Length.of.Stay[selected_area_data$Age.Group == "18 to 29"], na.rm = TRUE),
+        mean(selected_area_data$Length.of.Stay[selected_area_data$Age.Group == "30 to 49"], na.rm = TRUE),
+        mean(selected_area_data$Length.of.Stay[selected_area_data$Age.Group == "50 to 69"], na.rm = TRUE),
+        mean(selected_area_data$Length.of.Stay[selected_area_data$Age.Group == "70 or Older"], na.rm = TRUE)
+      ),
+      'Total Charges (USD)' = c(
+        format_large_numbers(sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Age.Group == "18 to 29"])), na.rm = TRUE)),
+        format_large_numbers(sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Age.Group == "30 to 49"])), na.rm = TRUE)),
+        format_large_numbers(sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Age.Group == "50 to 69"])), na.rm = TRUE)),
+        format_large_numbers(sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Age.Group == "70 or Older"])), na.rm = TRUE))
+      ),
+      'Percentage of Total Charges' = c(
+        round(sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Age.Group == "18 to 29"])), na.rm = TRUE) / total_charges_all * 100, 2),
+        round(sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Age.Group == "30 to 49"])), na.rm = TRUE) / total_charges_all * 100, 2),
+        round(sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Age.Group == "50 to 69"])), na.rm = TRUE) / total_charges_all * 100, 2),
+        round(sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Age.Group == "70 or Older"])), na.rm = TRUE) / total_charges_all * 100, 2)
       )
+
+        
+      #Gender_Distribution = c(
+      #  paste(sum(selected_area_data$Gender[selected_area_data$Age.Group == "18 to 29"] == "M"),
+      #        "/",
+      #        sum(selected_area_data$Gender[selected_area_data$Age.Group == "18 to 29"] == "F")),
+      #  paste(sum(selected_area_data$Gender[selected_area_data$Age.Group == "30 to 49"] == "M"),
+      #        "/",
+      #        sum(selected_area_data$Gender[selected_area_data$Age.Group == "30 to 49"] == "F")),
+      #  paste(sum(selected_area_data$Gender[selected_area_data$Age.Group == "50 to 69"] == "M"),
+      #        "/",
+      #        sum(selected_area_data$Gender[selected_area_data$Age.Group == "50 to 69"] == "F")),
+      #  paste(sum(selected_area_data$Gender[selected_area_data$Age.Group == "70 or Older"] == "M"),
+      #        "/",
+      #        sum(selected_area_data$Gender[selected_area_data$Age.Group == "70 or Older"] == "F"))
+      #)
     )
     
     # Return the Age Group table
@@ -195,12 +245,12 @@ server <- function(input, output, session) {
     
     # Create descriptive statistics for Surgical Status
     surgical_status_stats <- data.frame(
-      Category = c("Non-Surgical", "Surgical"),
-      N = c(sum(selected_area_data$Surgical.Status == "Non-Surgical"),
-            sum(selected_area_data$Surgical.Status == "Surgical")),
+      Category = c("Medical", "Surgical"),
+      N = c(sum(selected_area_data$APR.Medical.Surgical.Description == "Medical"),
+            sum(selected_area_data$APR.Medical.Surgical.Description == "Surgical")),
       Percentage = c(
-        round(sum(selected_area_data$Surgical.Status == "Non-Surgical") / nrow(selected_area_data) * 100, 1),
-        round(sum(selected_area_data$Surgical.Status == "Surgical") / nrow(selected_area_data) * 100, 1)
+        round(sum(selected_area_data$APR.Medical.Surgical.Description == "Medical") / nrow(selected_area_data) * 100, 1),
+        round(sum(selected_area_data$APR.Medical.Surgical.Description == "Surgical") / nrow(selected_area_data) * 100, 1)
       )
     )
     
@@ -213,10 +263,10 @@ server <- function(input, output, session) {
     selected_area_data <- filter(ny_hospdata, Hospital.Service.Area == input$area)
     
     surgical_data <- selected_area_data %>%
-      group_by(Surgical.Status) %>%
+      group_by(APR.Medical.Surgical.Description) %>%
       summarise(Count = n())
     
-    ggplot(surgical_data, aes(x = Surgical.Status, y = Count, fill = Surgical.Status)) +
+    ggplot(surgical_data, aes(x = APR.Medical.Surgical.Description, y = Count, fill = APR.Medical.Surgical.Description)) +
       geom_bar(stat = "identity", color = "black", show.legend = FALSE) +
       scale_fill_brewer(palette = "Pastel1") +  # Use a better color palette
       geom_text(aes(label = Count), vjust = -0.5, color = "black", size = 5) +  # Add data labels
