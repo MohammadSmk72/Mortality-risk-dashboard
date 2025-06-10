@@ -4,6 +4,7 @@ library(dplyr)
 library(shinydashboard)
 library(ggplot2)
 library(RColorBrewer)
+library(cowplot)
 
 # Read the dataset (make sure to update the path to your data)
 ny_hospdata <- read.csv("hospdata_2022.csv", header = TRUE)
@@ -113,6 +114,8 @@ server <- function(input, output, session) {
     # Filter the data based on the selected area
     selected_area_data <- filter(ny_hospdata, Hospital.Service.Area == input$area)
     
+   
+    
     # Get total patient count, total charges, and average length of stay
     total_patient_count <- nrow(selected_area_data)
     total_charges <- sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges)), na.rm = TRUE)
@@ -130,15 +133,15 @@ server <- function(input, output, session) {
     # Return the summary text as HTML with line breaks
     HTML(summary_text)
   })
+
+#______________________________________________________________________________   
   
   # Render the Age Group table for the selected service area
   output$age_group_table <- renderTable({
     
     # Filter the data for the selected area
     selected_area_data <- filter(ny_hospdata, Hospital.Service.Area == input$area)
-    
- 
-    
+
     total_charges_by_group <- data.frame(
       Category = c("18–29", "30–49", "50–69", "70+"),
       Total_Charges = c(
@@ -251,12 +254,17 @@ server <- function(input, output, session) {
     p2 <- ggplot(total_charges_by_group, aes(x = "", y = Percentage, fill = Category)) +
       geom_bar(stat = "identity", width = 1, color = "black") +
       coord_polar(theta = "y") +  # Makes it a pie chart
-      scale_fill_brewer(palette = "Set3") +  # Use a better color palette
+      scale_fill_brewer(palette = "Set3") +   # Use a better color palette
       theme_void() +  # Remove gridlines and background
-      theme(legend.position = "right") 
-    # Arrange the bar chart and pie chart side by side
-    gridExtra::grid.arrange(p1, p2, ncol = 2)
+      theme(legend.position = "right")  +  # Move legend to the right
+      labs(title = "Percentage of Total Charges by Age Group") +  # Add the title
+      theme(plot.title = element_text(hjust = .5, vjust = -7)) 
+    
+    
+       gridExtra::grid.arrange(p1, p2, ncol = 2)
   })
+  
+#______________________________________________________________________________   
   
   # Render the Severity table for the selected service area
   output$severity_table <- renderTable({
@@ -264,10 +272,48 @@ server <- function(input, output, session) {
     # Filter the data for the selected area
     selected_area_data <- filter(ny_hospdata, Hospital.Service.Area == input$area)
     
+    total_charges_by_group_s <- data.frame(
+      Category = c("Extreme", "Major", "Minor", "Moderate"),
+      Total_Charges = c(
+        sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$APR.Severity.of.Illness.Description == "Extreme"])), na.rm = TRUE),
+        sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$APR.Severity.of.Illness.Description == "Major"])), na.rm = TRUE),
+        sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$APR.Severity.of.Illness.Description == "Minor"])), na.rm = TRUE),
+        sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$APR.Severity.of.Illness.Description == "Moderate"])), na.rm = TRUE)
+      )
+    )
+    # Calculate the total charges across all age groups
+    total_charges_all <- sum(total_charges_by_group_s$Total_Charges)  # Total charges for all groups
+    
+    # Calculate percentage for each category based on the total charges
+    total_charges_by_group_s$Percentage <- round(total_charges_by_group_s$Total_Charges / total_charges_all * 100, 1)
+    
+    # Gender distribution calculation
+    Gender_Distribution <- c(
+      paste(
+        sum(selected_area_data$Gender[selected_area_data$APR.Severity.of.Illness.Description == "Extreme"] == "M", na.rm = TRUE),
+        "/",
+        sum(selected_area_data$Gender[selected_area_data$APR.Severity.of.Illness.Description == "Extreme"] == "F", na.rm = TRUE)
+      ),
+      paste(
+        sum(selected_area_data$Gender[selected_area_data$APR.Severity.of.Illness.Description == "Major"] == "M", na.rm = TRUE),
+        "/",
+        sum(selected_area_data$Gender[selected_area_data$APR.Severity.of.Illness.Description == "Major"] == "F", na.rm = TRUE)
+      ),
+      paste(
+        sum(selected_area_data$Gender[selected_area_data$APR.Severity.of.Illness.Description == "Minor"] == "M", na.rm = TRUE),
+        "/",
+        sum(selected_area_data$Gender[selected_area_data$APR.Severity.of.Illness.Description == "Minor"] == "F", na.rm = TRUE)
+      ),
+      paste(
+        sum(selected_area_data$Gender[selected_area_data$APR.Severity.of.Illness.Description == "Moderate"] == "M", na.rm = TRUE),
+        "/",
+        sum(selected_area_data$Gender[selected_area_data$APR.Severity.of.Illness.Description == "Moderate"] == "F", na.rm = TRUE)
+      )
+    )
     # Create descriptive statistics for Severity
     severity_stats <- data.frame(
       Category = c("Extreme", "Major", "Minor", "Moderate"),
-      N = c(sum(selected_area_data$APR.Severity.of.Illness.Description == "Extreme"),
+      'Patient Count' = c(sum(selected_area_data$APR.Severity.of.Illness.Description == "Extreme"),
             sum(selected_area_data$APR.Severity.of.Illness.Description == "Major"),
             sum(selected_area_data$APR.Severity.of.Illness.Description == "Minor"),
             sum(selected_area_data$APR.Severity.of.Illness.Description == "Moderate")),
@@ -276,7 +322,22 @@ server <- function(input, output, session) {
         round(sum(selected_area_data$APR.Severity.of.Illness.Description == "Major") / nrow(selected_area_data) * 100, 1),
         round(sum(selected_area_data$APR.Severity.of.Illness.Description == "Minor") / nrow(selected_area_data) * 100, 1),
         round(sum(selected_area_data$APR.Severity.of.Illness.Description == "Moderate") / nrow(selected_area_data) * 100, 1)
-      )
+      ),
+      'Gender Distribution_M/F' = Gender_Distribution,
+      'Average Length of Stay' = c(
+        mean(selected_area_data$Length.of.Stay[selected_area_data$APR.Severity.of.Illness.Description == "Extreme"], na.rm = TRUE),
+        mean(selected_area_data$Length.of.Stay[selected_area_data$APR.Severity.of.Illness.Description == "Major"], na.rm = TRUE),
+        mean(selected_area_data$Length.of.Stay[selected_area_data$APR.Severity.of.Illness.Description == "Minor"], na.rm = TRUE),
+        mean(selected_area_data$Length.of.Stay[selected_area_data$APR.Severity.of.Illness.Description == "Moderate"], na.rm = TRUE)
+      ),
+      'Total Charges' = c(
+        format_large_numbers(sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$APR.Severity.of.Illness.Description == "Extreme"])), na.rm = TRUE)),
+        format_large_numbers(sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$APR.Severity.of.Illness.Description == "Major"])), na.rm = TRUE)),
+        format_large_numbers(sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$APR.Severity.of.Illness.Description == "Minor"])), na.rm = TRUE)),
+        format_large_numbers(sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$APR.Severity.of.Illness.Description == "Moderate"])), na.rm = TRUE))
+      ),
+      'Percentage of Total Charges' = total_charges_by_group_s$Percentage # Use the percentage calculated from pie chart logic
+      
     )
     
     # Return the Severity table
@@ -291,7 +352,7 @@ server <- function(input, output, session) {
       group_by(APR.Severity.of.Illness.Description) %>%
       summarise(Count = n())
     
-    ggplot(severity_data, aes(x = APR.Severity.of.Illness.Description, y = Count, fill = APR.Severity.of.Illness.Description)) +
+    p1 <- ggplot(severity_data, aes(x = APR.Severity.of.Illness.Description, y = Count, fill = APR.Severity.of.Illness.Description)) +
       geom_bar(stat = "identity", color = "black", show.legend = FALSE) +
       scale_fill_brewer(palette = "Set2") +  # Use a better color palette
       geom_text(aes(label = Count), vjust = -0.5, color = "black", size = 5) +  # Add data labels
@@ -303,7 +364,36 @@ server <- function(input, output, session) {
         plot.title = element_blank(),  # Remove plot title
         axis.text.y = element_blank()  # Remove vertical y-axis numbers
       )
+    # Pie Chart: Percentage of Total Charges
+    total_charges_by_group_s <- data.frame(
+      Category = c("Extreme", "Major", "Minor", "Moderate"),
+      Total_Charges = c(
+        sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$APR.Severity.of.Illness.Description == "Extreme"])), na.rm = TRUE),
+        sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$APR.Severity.of.Illness.Description == "Major"])), na.rm = TRUE),
+        sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$APR.Severity.of.Illness.Description == "Minor"])), na.rm = TRUE),
+        sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$APR.Severity.of.Illness.Description == "Moderate"])), na.rm = TRUE)
+      )
+    )
+    total_charges_all <- sum(total_charges_by_group_s$Total_Charges)  # Total charges for all groups
+    
+    # Calculate percentage for each category
+    total_charges_by_group_s$Percentage <- round(total_charges_by_group_s$Total_Charges / total_charges_all * 100, 1)
+    
+    # Pie chart for total charges percentage
+    p2 <- ggplot(total_charges_by_group_s, aes(x = "", y = Percentage, fill = Category)) +
+      geom_bar(stat = "identity", width = 1, color = "black") +
+      coord_polar(theta = "y") +  # Makes it a pie chart
+      scale_fill_brewer(palette = "Set3") +   # Use a better color palette
+      theme_void() +  # Remove gridlines and background
+      theme(legend.position = "right")  +  # Move legend to the right
+      labs(title = "Percentage of Total Charges by Severity") +  # Add the title
+      theme(plot.title = element_text(hjust = .5, vjust = -7)) 
+    
+    gridExtra::grid.arrange(p1, p2, ncol = 2)
+
   })
+  
+#______________________________________________________________________________    
   
   # Render the Surgical Status table for the selected service area
   output$surgical_status_table <- renderTable({
@@ -311,15 +401,53 @@ server <- function(input, output, session) {
     # Filter the data for the selected area
     selected_area_data <- filter(ny_hospdata, Hospital.Service.Area == input$area)
     
+    total_charges_by_group_m <- data.frame(
+      Category = c("Medical", "Surgical"),
+      Total_Charges = c(
+        sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$APR.Medical.Surgical.Description == "Medical"])), na.rm = TRUE),
+        sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$APR.Medical.Surgical.Description == "Surgical"])), na.rm = TRUE)
+      )
+    )
+    # Calculate the total charges across all age groups
+    total_charges_all <- sum(total_charges_by_group_m$Total_Charges)  # Total charges for all groups
+    
+    # Calculate percentage for each category based on the total charges
+    total_charges_by_group_m$Percentage <- round(total_charges_by_group_m$Total_Charges / total_charges_all * 100, 1)
+    
+    # Gender distribution calculation
+    Gender_Distribution <- c(
+      paste(
+        sum(selected_area_data$Gender[selected_area_data$APR.Medical.Surgical.Description == "Medical"] == "M", na.rm = TRUE),
+        "/",
+        sum(selected_area_data$Gender[selected_area_data$APR.Medical.Surgical.Description == "Medical"] == "F", na.rm = TRUE)
+      ),
+      paste(
+        sum(selected_area_data$Gender[selected_area_data$APR.Medical.Surgical.Description == "Surgical"] == "M", na.rm = TRUE),
+        "/",
+        sum(selected_area_data$Gender[selected_area_data$APR.Medical.Surgical.Description == "Surgical"] == "F", na.rm = TRUE)
+      )
+    )
+    
     # Create descriptive statistics for Surgical Status
     surgical_status_stats <- data.frame(
       Category = c("Medical", "Surgical"),
-      N = c(sum(selected_area_data$APR.Medical.Surgical.Description == "Medical"),
+      'Patient Count' = c(sum(selected_area_data$APR.Medical.Surgical.Description == "Medical"),
             sum(selected_area_data$APR.Medical.Surgical.Description == "Surgical")),
       Percentage = c(
         round(sum(selected_area_data$APR.Medical.Surgical.Description == "Medical") / nrow(selected_area_data) * 100, 1),
         round(sum(selected_area_data$APR.Medical.Surgical.Description == "Surgical") / nrow(selected_area_data) * 100, 1)
-      )
+      ),
+      'Gender Distribution_M/F' = Gender_Distribution,
+      'Average Length of Stay' = c(
+        mean(selected_area_data$Length.of.Stay[selected_area_data$APR.Medical.Surgical.Description == "Medical"], na.rm = TRUE),
+        mean(selected_area_data$Length.of.Stay[selected_area_data$APR.Medical.Surgical.Description == "Surgical"], na.rm = TRUE)
+      ),
+      'Total Charges' = c(
+        format_large_numbers(sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$APR.Medical.Surgical.Description == "Medical"])), na.rm = TRUE)),
+        format_large_numbers(sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$APR.Medical.Surgical.Description == "Surgical"])), na.rm = TRUE))
+      ),
+      'Percentage of Total Charges' = total_charges_by_group_m$Percentage # Use the percentage calculated from pie chart logic
+      
     )
     
     # Return the Surgical Status table
@@ -334,7 +462,7 @@ server <- function(input, output, session) {
       group_by(APR.Medical.Surgical.Description) %>%
       summarise(Count = n())
     
-    ggplot(surgical_data, aes(x = APR.Medical.Surgical.Description, y = Count, fill = APR.Medical.Surgical.Description)) +
+    p1 <- ggplot(surgical_data, aes(x = APR.Medical.Surgical.Description, y = Count, fill = APR.Medical.Surgical.Description)) +
       geom_bar(stat = "identity", color = "black", show.legend = FALSE) +
       scale_fill_brewer(palette = "Pastel1") +  # Use a better color palette
       geom_text(aes(label = Count), vjust = -0.5, color = "black", size = 5) +  # Add data labels
@@ -346,7 +474,34 @@ server <- function(input, output, session) {
         plot.title = element_blank(),  # Remove plot title
         axis.text.y = element_blank()  # Remove vertical y-axis numbers
       )
+    # Pie Chart: Percentage of Total Charges
+    total_charges_by_group_m <- data.frame(
+      Category = c("Medical", "Surgical"),
+      Total_Charges = c(
+        sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$APR.Medical.Surgical.Description == "Medical"])), na.rm = TRUE),
+        sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$APR.Medical.Surgical.Description == "Surgical"])), na.rm = TRUE)
+      )
+    )
+    total_charges_all <- sum(total_charges_by_group_m$Total_Charges)  # Total charges for all groups
+    
+    # Calculate percentage for each category
+    total_charges_by_group_m$Percentage <- round(total_charges_by_group_m$Total_Charges / total_charges_all * 100, 1)
+    
+    # Pie chart for total charges percentage
+    p2 <- ggplot(total_charges_by_group_m, aes(x = "", y = Percentage, fill = Category)) +
+      geom_bar(stat = "identity", width = 1, color = "black") +
+      coord_polar(theta = "y") +  # Makes it a pie chart
+      scale_fill_brewer(palette = "Set3") +   # Use a better color palette
+      theme_void() +  # Remove gridlines and background
+      theme(legend.position = "right")  +  # Move legend to the right
+      labs(title = "Percentage of Total Charges by Severity") +  # Add the title
+      theme(plot.title = element_text(hjust = .5, vjust = -7)) 
+    
+    gridExtra::grid.arrange(p1, p2, ncol = 2)
+    
   })
+  
+#_______________________________________________________________________________  
   
   # Render the patient count for hospitals within the selected area
   output$patient_count_table <- renderTable({
