@@ -32,12 +32,16 @@ ui <- dashboardPage(
         text-align: center;  /* Center content in the table */
         vertical-align: middle;  /* Vertically align text in the center */
       }
+      .table th {
+        text-align: center;  /* Center the column names (headers) */
+      }
       .total-patient-text {
         font-size: 30px;  /* Set font size to 30px */
         font-weight: bold; /* Make the text bold */
         color: #2c3e50;  /* Set a dark color for better readability */
       }
     ")),
+  
     
     tabItems(
       # First Tab: Descriptive Characteristics
@@ -58,7 +62,13 @@ ui <- dashboardPage(
                                plotOutput("severity_chart")),
                       tabPanel("Surgical Status", 
                                tableOutput("surgical_status_table"), 
-                               plotOutput("surgical_status_chart"))
+                               plotOutput("surgical_status_chart")),
+                      tabPanel("Race", 
+                               tableOutput("race_table"), 
+                               plotOutput("race_chart")),
+                      tabPanel("Ethnicity", 
+                               tableOutput("ethnicity_table"), 
+                               plotOutput("ethnicity_chart"))
                     )
                 )
               )),
@@ -114,8 +124,6 @@ server <- function(input, output, session) {
     # Filter the data based on the selected area
     selected_area_data <- filter(ny_hospdata, Hospital.Service.Area == input$area)
     
-   
-    
     # Get total patient count, total charges, and average length of stay
     total_patient_count <- nrow(selected_area_data)
     total_charges <- sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges)), na.rm = TRUE)
@@ -143,8 +151,9 @@ server <- function(input, output, session) {
     selected_area_data <- filter(ny_hospdata, Hospital.Service.Area == input$area)
 
     total_charges_by_group <- data.frame(
-      Category = c("18–29", "30–49", "50–69", "70+"),
+      Category = c("0-17","18–29", "30–49", "50–69", "70+"),
       Total_Charges = c(
+        sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Age.Group == "0 to 17"])), na.rm = TRUE),
         sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Age.Group == "18 to 29"])), na.rm = TRUE),
         sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Age.Group == "30 to 49"])), na.rm = TRUE),
         sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Age.Group == "50 to 69"])), na.rm = TRUE),
@@ -160,6 +169,11 @@ server <- function(input, output, session) {
     
     # Gender distribution calculation
     Gender_Distribution <- c(
+      paste(
+        sum(selected_area_data$Gender[selected_area_data$Age.Group == "0 to 17"] == "M", na.rm = TRUE),
+        "/",
+        sum(selected_area_data$Gender[selected_area_data$Age.Group == "0 to 17"] == "F", na.rm = TRUE)
+      ),
       paste(
         sum(selected_area_data$Gender[selected_area_data$Age.Group == "18 to 29"] == "M", na.rm = TRUE),
         "/",
@@ -181,14 +195,46 @@ server <- function(input, output, session) {
         sum(selected_area_data$Gender[selected_area_data$Age.Group == "70 or Older"] == "F", na.rm = TRUE)
       )
     )
+    # Dead and Alive distribution calculation
+    Dead_Alive_Distribution <- c(
+      paste(
+        sum(selected_area_data$Age.Group == "0 to 17" & selected_area_data$Patient.Disposition == "Expired", na.rm = TRUE),
+        "/",
+        sum(selected_area_data$Age.Group == "0 to 17" & selected_area_data$Patient.Disposition != "Expired", na.rm = TRUE)
+      ),
+      paste(
+        sum(selected_area_data$Age.Group == "18 to 29" & selected_area_data$Patient.Disposition == "Expired", na.rm = TRUE),
+        "/",
+        sum(selected_area_data$Age.Group == "18 to 29" & selected_area_data$Patient.Disposition != "Expired", na.rm = TRUE)
+      ),
+      paste(
+        sum(selected_area_data$Age.Group == "30 to 49" & selected_area_data$Patient.Disposition == "Expired", na.rm = TRUE),
+        "/",
+        sum(selected_area_data$Age.Group == "30 to 49" & selected_area_data$Patient.Disposition != "Expired", na.rm = TRUE)
+      ),
+      paste(
+        sum(selected_area_data$Age.Group == "50 to 69" & selected_area_data$Patient.Disposition == "Expired", na.rm = TRUE),
+        "/",
+        sum(selected_area_data$Age.Group == "50 to 69" & selected_area_data$Patient.Disposition != "Expired", na.rm = TRUE)
+      ),
+      paste(
+        sum(selected_area_data$Age.Group == "70 or Older" & selected_area_data$Patient.Disposition == "Expired", na.rm = TRUE),
+        "/",
+        sum(selected_area_data$Age.Group == "70 or Older" & selected_area_data$Patient.Disposition != "Expired", na.rm = TRUE)
+      )
+    )
+    
     # Create descriptive statistics for Age Group
     age_group_stats <- data.frame(
-      Category = c("18–29", "30–49", "50–69", "70+"),
-      "Patient Count" = c(sum(selected_area_data$Age.Group == "18 to 29"),
+      Category = c("0-17","18–29", "30–49", "50–69", "70+"),
+      "Patient Count" = c(
+            sum(selected_area_data$Age.Group == "0 to 17"),
+            sum(selected_area_data$Age.Group == "18 to 29"),
             sum(selected_area_data$Age.Group == "30 to 49"),
             sum(selected_area_data$Age.Group == "50 to 69"),
             sum(selected_area_data$Age.Group == "70 or Older")),
       'Percentage' = c(
+        round(sum(selected_area_data$Age.Group == "0 to 17") / nrow(selected_area_data) * 100, 1),
         round(sum(selected_area_data$Age.Group == "18 to 29") / nrow(selected_area_data) * 100, 1),
         round(sum(selected_area_data$Age.Group == "30 to 49") / nrow(selected_area_data) * 100, 1),
         round(sum(selected_area_data$Age.Group == "50 to 69") / nrow(selected_area_data) * 100, 1),
@@ -196,19 +242,22 @@ server <- function(input, output, session) {
       ),
       'Gender Distribution_M/F' = Gender_Distribution,
       'Average Length of Stay' = c(
+        mean(selected_area_data$Length.of.Stay[selected_area_data$Age.Group == "0 to 17"], na.rm = TRUE),
         mean(selected_area_data$Length.of.Stay[selected_area_data$Age.Group == "18 to 29"], na.rm = TRUE),
         mean(selected_area_data$Length.of.Stay[selected_area_data$Age.Group == "30 to 49"], na.rm = TRUE),
         mean(selected_area_data$Length.of.Stay[selected_area_data$Age.Group == "50 to 69"], na.rm = TRUE),
         mean(selected_area_data$Length.of.Stay[selected_area_data$Age.Group == "70 or Older"], na.rm = TRUE)
       ),
       'Total Charges' = c(
+        format_large_numbers(sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Age.Group == "0 to 17"])), na.rm = TRUE)),
         format_large_numbers(sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Age.Group == "18 to 29"])), na.rm = TRUE)),
         format_large_numbers(sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Age.Group == "30 to 49"])), na.rm = TRUE)),
         format_large_numbers(sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Age.Group == "50 to 69"])), na.rm = TRUE)),
         format_large_numbers(sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Age.Group == "70 or Older"])), na.rm = TRUE))
       ),
-      'Percentage of Total Charges' = total_charges_by_group$Percentage # Use the percentage calculated from pie chart logic
+      'Percentage of Total Charges' = total_charges_by_group$Percentage, # Use the percentage calculated from pie chart logic
       
+      'Dead/Alive Patients' = Dead_Alive_Distribution 
     )
     
     # Return the Age Group table
@@ -237,8 +286,9 @@ server <- function(input, output, session) {
       )
     # Pie Chart: Percentage of Total Charges
     total_charges_by_group <- data.frame(
-      Category = c("18–29", "30–49", "50–69", "70+"),
+      Category = c("0-17","18–29", "30–49", "50–69", "70+"),
       Total_Charges = c(
+        sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Age.Group == "0 to 17"])), na.rm = TRUE),
         sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Age.Group == "18 to 29"])), na.rm = TRUE),
         sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Age.Group == "30 to 49"])), na.rm = TRUE),
         sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Age.Group == "50 to 69"])), na.rm = TRUE),
@@ -310,6 +360,29 @@ server <- function(input, output, session) {
         sum(selected_area_data$Gender[selected_area_data$APR.Severity.of.Illness.Description == "Moderate"] == "F", na.rm = TRUE)
       )
     )
+    # Dead and Alive distribution calculation
+    Dead_Alive_Distribution <- c(
+      paste(
+        sum(selected_area_data$APR.Severity.of.Illness.Description == "Extreme" & selected_area_data$Patient.Disposition == "Expired", na.rm = TRUE),
+        "/",
+        sum(selected_area_data$APR.Severity.of.Illness.Description == "Extreme" & selected_area_data$Patient.Disposition != "Expired", na.rm = TRUE)
+      ),
+      paste(
+        sum(selected_area_data$APR.Severity.of.Illness.Description == "Major" & selected_area_data$Patient.Disposition == "Expired", na.rm = TRUE),
+        "/",
+        sum(selected_area_data$APR.Severity.of.Illness.Description == "Major" & selected_area_data$Patient.Disposition != "Expired", na.rm = TRUE)
+      ),
+      paste(
+        sum(selected_area_data$APR.Severity.of.Illness.Description == "Minor" & selected_area_data$Patient.Disposition == "Expired", na.rm = TRUE),
+        "/",
+        sum(selected_area_data$APR.Severity.of.Illness.Description == "Minor" & selected_area_data$Patient.Disposition != "Expired", na.rm = TRUE)
+      ),
+      paste(
+        sum(selected_area_data$APR.Severity.of.Illness.Description == "Moderate" & selected_area_data$Patient.Disposition == "Expired", na.rm = TRUE),
+        "/",
+        sum(selected_area_data$APR.Severity.of.Illness.Description == "Moderate" & selected_area_data$Patient.Disposition != "Expired", na.rm = TRUE)
+      )
+    )
     # Create descriptive statistics for Severity
     severity_stats <- data.frame(
       Category = c("Extreme", "Major", "Minor", "Moderate"),
@@ -336,8 +409,8 @@ server <- function(input, output, session) {
         format_large_numbers(sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$APR.Severity.of.Illness.Description == "Minor"])), na.rm = TRUE)),
         format_large_numbers(sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$APR.Severity.of.Illness.Description == "Moderate"])), na.rm = TRUE))
       ),
-      'Percentage of Total Charges' = total_charges_by_group_s$Percentage # Use the percentage calculated from pie chart logic
-      
+      'Percentage of Total Charges' = total_charges_by_group_s$Percentage, # Use the percentage calculated from pie chart logic
+      'Dead/Alive Patients' = Dead_Alive_Distribution 
     )
     
     # Return the Severity table
@@ -427,6 +500,19 @@ server <- function(input, output, session) {
         sum(selected_area_data$Gender[selected_area_data$APR.Medical.Surgical.Description == "Surgical"] == "F", na.rm = TRUE)
       )
     )
+    # Dead and Alive distribution calculation
+    Dead_Alive_Distribution <- c(
+      paste(
+        sum(selected_area_data$APR.Medical.Surgical.Description == "Medical" & selected_area_data$Patient.Disposition == "Expired", na.rm = TRUE),
+        "/",
+        sum(selected_area_data$APR.Medical.Surgical.Description == "Medical" & selected_area_data$Patient.Disposition != "Expired", na.rm = TRUE)
+      ),
+      paste(
+        sum(selected_area_data$APR.Medical.Surgical.Description == "Surgical" & selected_area_data$Patient.Disposition == "Expired", na.rm = TRUE),
+        "/",
+        sum(selected_area_data$APR.Medical.Surgical.Description == "Surgical" & selected_area_data$Patient.Disposition != "Expired", na.rm = TRUE)
+      )
+    )
     
     # Create descriptive statistics for Surgical Status
     surgical_status_stats <- data.frame(
@@ -446,8 +532,8 @@ server <- function(input, output, session) {
         format_large_numbers(sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$APR.Medical.Surgical.Description == "Medical"])), na.rm = TRUE)),
         format_large_numbers(sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$APR.Medical.Surgical.Description == "Surgical"])), na.rm = TRUE))
       ),
-      'Percentage of Total Charges' = total_charges_by_group_m$Percentage # Use the percentage calculated from pie chart logic
-      
+      'Percentage of Total Charges' = total_charges_by_group_m$Percentage, # Use the percentage calculated from pie chart logic
+      'Dead/Alive Patients' = Dead_Alive_Distribution 
     )
     
     # Return the Surgical Status table
@@ -500,6 +586,313 @@ server <- function(input, output, session) {
     gridExtra::grid.arrange(p1, p2, ncol = 2)
     
   })
+  
+  #_____________________________________________________________________________
+  
+  # Render the Race table for the selected service area
+  output$race_table <- renderTable({
+    
+    # Filter the data for the selected area
+    selected_area_data <- filter(ny_hospdata, Hospital.Service.Area == input$area)
+    
+    total_charges_by_group_r <- data.frame(
+      Category = c("Black/African American", "Multi-racial", "Other Race", "White"),
+      Total_Charges = c(
+        sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Race == "Black/African American"])), na.rm = TRUE),
+        sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Race == "Multi-racial"])), na.rm = TRUE),
+        sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Race == "Other Race"])), na.rm = TRUE),
+        sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Race == "White"])), na.rm = TRUE)
+      )
+    )
+    
+    # Calculate the total charges across all age groups
+    total_charges_all <- sum(total_charges_by_group_r$Total_Charges)  # Total charges for all groups
+    
+    # Calculate percentage for each category based on the total charges
+    total_charges_by_group_r$Percentage <- round(total_charges_by_group_r$Total_Charges / total_charges_all * 100, 1)
+    
+    # Gender distribution calculation
+    Gender_Distribution <- c(
+      paste(
+        sum(selected_area_data$Gender[selected_area_data$Race == "Black/African American"] == "M", na.rm = TRUE),
+        "/",
+        sum(selected_area_data$Gender[selected_area_data$Race == "Black/African American"] == "F", na.rm = TRUE)
+      ),
+      paste(
+        sum(selected_area_data$Gender[selected_area_data$Race == "Multi-racial"] == "M", na.rm = TRUE),
+        "/",
+        sum(selected_area_data$Gender[selected_area_data$Race == "Multi-racial"] == "F", na.rm = TRUE)
+      ),
+      paste(
+        sum(selected_area_data$Gender[selected_area_data$Race == "Other Race"] == "M", na.rm = TRUE),
+        "/",
+        sum(selected_area_data$Gender[selected_area_data$Race == "Other Race"] == "F", na.rm = TRUE)
+      ),
+      paste(
+        sum(selected_area_data$Gender[selected_area_data$Race == "White"] == "M", na.rm = TRUE),
+        "/",
+        sum(selected_area_data$Gender[selected_area_data$Race == "White"] == "F", na.rm = TRUE)
+      )
+    )
+    Dead_Alive_Distribution <- c(
+      paste(
+        sum(selected_area_data$Race == "Black/African American" & selected_area_data$Patient.Disposition == "Expired", na.rm = TRUE),
+        "/",
+        sum(selected_area_data$Race == "Black/African American" & selected_area_data$Patient.Disposition != "Expired", na.rm = TRUE)
+      ),
+      paste(
+        sum(selected_area_data$Race == "Multi-racial" & selected_area_data$Patient.Disposition == "Expired", na.rm = TRUE),
+        "/",
+        sum(selected_area_data$Race == "Multi-racial" & selected_area_data$Patient.Disposition != "Expired", na.rm = TRUE)
+      ),
+      paste(
+        sum(selected_area_data$Race == "Other Race" & selected_area_data$Patient.Disposition == "Expired", na.rm = TRUE),
+        "/",
+        sum(selected_area_data$Race == "Other Race" & selected_area_data$Patient.Disposition != "Expired", na.rm = TRUE)
+      ),
+      paste(
+        sum(selected_area_data$Race == "White" & selected_area_data$Patient.Disposition == "Expired", na.rm = TRUE),
+        "/",
+        sum(selected_area_data$Race == "White" & selected_area_data$Patient.Disposition != "Expired", na.rm = TRUE)
+      )
+    )
+    # Create descriptive statistics for Age Group
+    race_group_stats <- data.frame(
+      Category = c("Black/African American", "Multi-racial", "Other Race", "White"),
+      "Patient Count" = c(sum(selected_area_data$Race == "Black/African American"),
+                          sum(selected_area_data$Race == "Multi-racial"),
+                          sum(selected_area_data$Race == "Other Race"),
+                          sum(selected_area_data$Race == "White")),
+      'Percentage' = c(
+        round(sum(selected_area_data$Race == "Black/African American") / nrow(selected_area_data) * 100, 1),
+        round(sum(selected_area_data$Race == "Multi-racial") / nrow(selected_area_data) * 100, 1),
+        round(sum(selected_area_data$Race == "Other Race") / nrow(selected_area_data) * 100, 1),
+        round(sum(selected_area_data$Race == "White") / nrow(selected_area_data) * 100, 1)
+      ),
+      'Gender Distribution_M/F' = Gender_Distribution,
+      'Average Length of Stay' = c(
+        mean(selected_area_data$Length.of.Stay[selected_area_data$Race == "Black/African American"], na.rm = TRUE),
+        mean(selected_area_data$Length.of.Stay[selected_area_data$Race == "Multi-racial"], na.rm = TRUE),
+        mean(selected_area_data$Length.of.Stay[selected_area_data$Race == "Other Race"], na.rm = TRUE),
+        mean(selected_area_data$Length.of.Stay[selected_area_data$Race == "White"], na.rm = TRUE)
+      ),
+      'Total Charges' = c(
+        format_large_numbers(sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Race == "Black/African American"])), na.rm = TRUE)),
+        format_large_numbers(sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Race == "Multi-racial"])), na.rm = TRUE)),
+        format_large_numbers(sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Race == "Other Race"])), na.rm = TRUE)),
+        format_large_numbers(sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Race == "White"])), na.rm = TRUE))
+      ),
+      'Percentage of Total Charges' = total_charges_by_group_r$Percentage, # Use the percentage calculated from pie chart logic
+      'Dead/Alive Patients' = Dead_Alive_Distribution 
+    )
+    
+    # Return the Age Group table
+    race_group_stats
+  })
+  
+  # Render the bar chart for Age Group with enhanced design
+  output$race_chart <- renderPlot({
+    selected_area_data <- filter(ny_hospdata, Hospital.Service.Area == input$area)
+    
+    race_group_data <- selected_area_data %>%
+      group_by(Race) %>%
+      summarise(Count = n())
+    # Bar chart for total patient count
+    p1 <- ggplot(race_group_data, aes(x = Race, y = Count, fill = Race)) +
+      geom_bar(stat = "identity", color = "black", show.legend = FALSE) +
+      scale_fill_brewer(palette = "Set3") +  # Use a better color palette
+      geom_text(aes(label = Count), vjust = -0.5, color = "black", size = 5) +  # Add data labels
+      theme_minimal(base_size = 15) +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1),  # Rotate x-axis labels for better visibility
+        panel.grid = element_blank(),  # Remove grid lines
+        axis.title = element_blank(),  # Remove axis titles
+        plot.title = element_blank(),  # Remove plot title
+        axis.text.y = element_blank()  # Remove vertical y-axis numbers
+      )
+    # Pie Chart: Percentage of Total Charges
+    total_charges_by_group_r <- data.frame(
+      Category = c("Black/African American", "Multi-racial", "Other Race", "White"),
+      Total_Charges = c(
+        sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Race == "Black/African American"])), na.rm = TRUE),
+        sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Race == "Multi-racial"])), na.rm = TRUE),
+        sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Race == "Other Race"])), na.rm = TRUE),
+        sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Race == "White"])), na.rm = TRUE)
+      )
+    )
+    total_charges_all <- sum(total_charges_by_group_r$Total_Charges)  # Total charges for all groups
+    
+    # Calculate percentage for each category
+    total_charges_by_group_r$Percentage <- round(total_charges_by_group_r$Total_Charges / total_charges_all * 100, 1)
+    
+    # Pie chart for total charges percentage
+    p2 <- ggplot(total_charges_by_group_r, aes(x = "", y = Percentage, fill = Category)) +
+      geom_bar(stat = "identity", width = 1, color = "black") +
+      coord_polar(theta = "y") +  # Makes it a pie chart
+      scale_fill_brewer(palette = "Set3") +   # Use a better color palette
+      theme_void() +  # Remove gridlines and background
+      theme(legend.position = "right")  +  # Move legend to the right
+      labs(title = "Percentage of Total Charges by Race") +  # Add the title
+      theme(plot.title = element_text(hjust = .5, vjust = -7)) 
+    
+    
+    gridExtra::grid.arrange(p1, p2, ncol = 2)
+  })
+  
+  #____________________________________________________________________________
+  
+  # Render the Ethnicity table for the selected service area
+  output$ethnicity_table <- renderTable({
+    
+    # Filter the data for the selected area
+    selected_area_data <- filter(ny_hospdata, Hospital.Service.Area == input$area)
+    
+    total_charges_by_group_e <- data.frame(
+      Category = c("Multi-ethnic", "Not Span/Hispanic", "Spanish/Hispanic", "Unknown"),
+      Total_Charges = c(
+        sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Ethnicity == "Multi-ethnic"])), na.rm = TRUE),
+        sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Ethnicity == "Not Span/Hispanic"])), na.rm = TRUE),
+        sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Ethnicity == "Spanish/Hispanic"])), na.rm = TRUE),
+        sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Ethnicity == "Unknown"])), na.rm = TRUE)
+      )
+    )
+    
+    # Calculate the total charges across all age groups
+    total_charges_all <- sum(total_charges_by_group_e$Total_Charges)  # Total charges for all groups
+    
+    # Calculate percentage for each category based on the total charges
+    total_charges_by_group_e$Percentage <- round(total_charges_by_group_e$Total_Charges / total_charges_all * 100, 1)
+    
+    # Gender distribution calculation
+    Gender_Distribution <- c(
+      paste(
+        sum(selected_area_data$Gender[selected_area_data$Ethnicity == "Multi-ethnic"] == "M", na.rm = TRUE),
+        "/",
+        sum(selected_area_data$Gender[selected_area_data$Ethnicity == "Multi-ethnic"] == "F", na.rm = TRUE)
+      ),
+      paste(
+        sum(selected_area_data$Gender[selected_area_data$Ethnicity == "Not Span/Hispanic"] == "M", na.rm = TRUE),
+        "/",
+        sum(selected_area_data$Gender[selected_area_data$Ethnicity == "Not Span/Hispanic"] == "F", na.rm = TRUE)
+      ),
+      paste(
+        sum(selected_area_data$Gender[selected_area_data$Ethnicity == "Spanish/Hispanic"] == "M", na.rm = TRUE),
+        "/",
+        sum(selected_area_data$Gender[selected_area_data$Ethnicity == "Spanish/Hispanic"] == "F", na.rm = TRUE)
+      ),
+      paste(
+        sum(selected_area_data$Gender[selected_area_data$Ethnicity == "Unknown"] == "M", na.rm = TRUE),
+        "/",
+        sum(selected_area_data$Gender[selected_area_data$Ethnicity == "Unknown"] == "F", na.rm = TRUE)
+      )
+    )
+    Dead_Alive_Distribution <- c(
+      paste(
+        sum(selected_area_data$Ethnicity == "Multi-ethnic" & selected_area_data$Patient.Disposition == "Expired", na.rm = TRUE),
+        "/",
+        sum(selected_area_data$Ethnicity == "Multi-ethnic" & selected_area_data$Patient.Disposition != "Expired", na.rm = TRUE)
+      ),
+      paste(
+        sum(selected_area_data$Ethnicity == "Not Span/Hispanic" & selected_area_data$Patient.Disposition == "Expired", na.rm = TRUE),
+        "/",
+        sum(selected_area_data$Ethnicity == "Not Span/Hispanic" & selected_area_data$Patient.Disposition != "Expired", na.rm = TRUE)
+      ),
+      paste(
+        sum(selected_area_data$Ethnicity == "Spanish/Hispanic" & selected_area_data$Patient.Disposition == "Expired", na.rm = TRUE),
+        "/",
+        sum(selected_area_data$Ethnicity == "Spanish/Hispanic" & selected_area_data$Patient.Disposition != "Expired", na.rm = TRUE)
+      ),
+      paste(
+        sum(selected_area_data$Ethnicity == "Unknown" & selected_area_data$Patient.Disposition == "Expired", na.rm = TRUE),
+        "/",
+        sum(selected_area_data$Ethnicity == "Unknown" & selected_area_data$Patient.Disposition != "Expired", na.rm = TRUE)
+      )
+    )
+    # Create descriptive statistics for Age Group
+    ethnicity_group_stats <- data.frame(
+      Category = c("Multi-ethnic", "Not Span/Hispanic", "Spanish/Hispanic", "Unknown"),
+      "Patient Count" = c(sum(selected_area_data$Ethnicity == "Multi-ethnic"),
+                          sum(selected_area_data$Ethnicity == "Not Span/Hispanic"),
+                          sum(selected_area_data$Ethnicity == "Spanish/Hispanic"),
+                          sum(selected_area_data$Ethnicity == "Unknown")),
+      'Percentage' = c(
+        round(sum(selected_area_data$Ethnicity == "Multi-ethnic") / nrow(selected_area_data) * 100, 1),
+        round(sum(selected_area_data$Ethnicity == "Not Span/Hispanic") / nrow(selected_area_data) * 100, 1),
+        round(sum(selected_area_data$Ethnicity == "Spanish/Hispanic") / nrow(selected_area_data) * 100, 1),
+        round(sum(selected_area_data$Ethnicity == "Unknown") / nrow(selected_area_data) * 100, 1)
+      ),
+      'Gender Distribution_M/F' = Gender_Distribution,
+      'Average Length of Stay' = c(
+        mean(selected_area_data$Length.of.Stay[selected_area_data$Ethnicity == "Multi-ethnic"], na.rm = TRUE),
+        mean(selected_area_data$Length.of.Stay[selected_area_data$Ethnicity == "Not Span/Hispanic"], na.rm = TRUE),
+        mean(selected_area_data$Length.of.Stay[selected_area_data$Ethnicity == "Spanish/Hispanic"], na.rm = TRUE),
+        mean(selected_area_data$Length.of.Stay[selected_area_data$Ethnicity == "Unknown"], na.rm = TRUE)
+      ),
+      'Total Charges' = c(
+        format_large_numbers(sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Ethnicity == "Multi-ethnic"])), na.rm = TRUE)),
+        format_large_numbers(sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Ethnicity == "Not Span/Hispanic"])), na.rm = TRUE)),
+        format_large_numbers(sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Ethnicity == "Spanish/Hispanic"])), na.rm = TRUE)),
+        format_large_numbers(sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Ethnicity == "Unknown"])), na.rm = TRUE))
+      ),
+      'Percentage of Total Charges' = total_charges_by_group_e$Percentage, # Use the percentage calculated from pie chart logic
+      'Dead/Alive Patients' = Dead_Alive_Distribution 
+    )
+    
+    # Return the Age Group table
+    ethnicity_group_stats
+  })
+  
+  # Render the bar chart for Age Group with enhanced design
+  output$ethnicity_chart <- renderPlot({
+    selected_area_data <- filter(ny_hospdata, Hospital.Service.Area == input$area)
+    
+    ethnicity_group_data <- selected_area_data %>%
+      group_by(Ethnicity) %>%
+      summarise(Count = n())
+    # Bar chart for total patient count
+    p1 <- ggplot(ethnicity_group_data, aes(x = Ethnicity, y = Count, fill = Ethnicity)) +
+      geom_bar(stat = "identity", color = "black", show.legend = FALSE) +
+      scale_fill_brewer(palette = "Set3") +  # Use a better color palette
+      geom_text(aes(label = Count), vjust = -0.5, color = "black", size = 5) +  # Add data labels
+      theme_minimal(base_size = 15) +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1),  # Rotate x-axis labels for better visibility
+        panel.grid = element_blank(),  # Remove grid lines
+        axis.title = element_blank(),  # Remove axis titles
+        plot.title = element_blank(),  # Remove plot title
+        axis.text.y = element_blank()  # Remove vertical y-axis numbers
+      )
+    # Pie Chart: Percentage of Total Charges
+    total_charges_by_group_e <- data.frame(
+      Category = c("Multi-ethnic", "Not Span/Hispanic", "Spanish/Hispanic", "Unknown"),
+      Total_Charges = c(
+        sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Ethnicity == "Multi-ethnic"])), na.rm = TRUE),
+        sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Ethnicity == "Not Span/Hispanic"])), na.rm = TRUE),
+        sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Ethnicity == "Spanish/Hispanic"])), na.rm = TRUE),
+        sum(as.numeric(gsub(",", "", selected_area_data$Total.Charges[selected_area_data$Ethnicity == "Unknown"])), na.rm = TRUE)
+      )
+    )
+    total_charges_all <- sum(total_charges_by_group_e$Total_Charges)  # Total charges for all groups
+    
+    # Calculate percentage for each category
+    total_charges_by_group_e$Percentage <- round(total_charges_by_group_e$Total_Charges / total_charges_all * 100, 1)
+    
+    # Pie chart for total charges percentage
+    p2 <- ggplot(total_charges_by_group_e, aes(x = "", y = Percentage, fill = Category)) +
+      geom_bar(stat = "identity", width = 1, color = "black") +
+      coord_polar(theta = "y") +  # Makes it a pie chart
+      scale_fill_brewer(palette = "Set3") +   # Use a better color palette
+      theme_void() +  # Remove gridlines and background
+      theme(legend.position = "right")  +  # Move legend to the right
+      labs(title = "Percentage of Total Charges by Ethnicity") +  # Add the title
+      theme(plot.title = element_text(hjust = .5, vjust = -7)) 
+    
+    
+    gridExtra::grid.arrange(p1, p2, ncol = 2)
+  })
+  
+  
+  #______________________________________________________________________________    
   
 #_______________________________________________________________________________  
   
