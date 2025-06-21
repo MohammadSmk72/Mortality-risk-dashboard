@@ -5,6 +5,7 @@ library(shinydashboard)
 library(ggplot2)
 library(RColorBrewer)
 library(cowplot)
+library(ggforce)
 
 # Read the dataset (make sure to update the path to your data)
 ny_hospdata <- read.csv("hospdata_2022.csv", header = TRUE)
@@ -76,15 +77,24 @@ ui <- dashboardPage(
       # Second Tab: Hospital Patient Count
       tabItem(tabName = "patient_count",
               fluidRow(
-                box(width = 12,
+                box(width = 6,
                     selectInput("area_patient", "Choose a Hospital Service Area:", 
                                 choices = unique(ny_hospdata$Hospital.Service.Area),
                                 selected = unique(ny_hospdata$Hospital.Service.Area)[1])
                 ),
+                valueBoxOutput("total_patient_count", width = 3),
+                valueBoxOutput("total_charge_count", width = 3),
                 box(width = 12,
-                    div(textOutput("total_patient_count"), class = "total-patient-text"),
-                    tableOutput("patient_count_table")
+                    tabsetPanel(
+                      tabPanel(
+                        "Age Group", plotOutput("age_group_chart_hist")
+                         ),
+                      tabPanel(
+                        "Severity", plotOutput("severity_chart_hist")
+                        ),
+                    )
                 )
+             
               )),
       
       # Third Tab: Surgical Frequency Table
@@ -894,36 +904,208 @@ server <- function(input, output, session) {
   
   #______________________________________________________________________________    
   
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
 #_______________________________________________________________________________  
   
   # Render the patient count for hospitals within the selected area
-  output$patient_count_table <- renderTable({
+  output$total_patient_count <- renderValueBox({
+    req(input$area_patient)
     
-    # Filter the data for the selected area
-    selected_area_data <- filter(ny_hospdata, Hospital.Service.Area == input$area_patient)
+    selected_data <- filter(ny_hospdata, Hospital.Service.Area == input$area_patient)
+    total <- nrow(selected_data)
+   
+    # Create valueBox for total patient count
+    valueBox(
+      value = format(total, big.mark = ".", decimal.mark = ","),
+      subtitle = "Patients",
+      icon = icon("user"),
+      color = "teal"
+    )
+  })
+  output$total_charge_count <- renderValueBox({
+    req(input$area_patient)
     
-    # Count the number of patients for each hospital (count rows per hospital)
-    patient_count <- selected_area_data %>%
-      group_by(Facility.Name) %>%
-      summarise(PatientCount = n()) %>%
-      arrange(desc(PatientCount))  # Sort by patient count in descending order
+    selected_data <- filter(ny_hospdata, Hospital.Service.Area == input$area_patient)
+    # Count the total number of patients in the selected service area
+    total_patient_charge <- sum(as.numeric(gsub(",", "", selected_data$Total.Charges)), na.rm = TRUE)
+    # Format the total charges to be more readable (in millions or billions)
+    total_charges_formatted <- format_large_numbers(total_patient_charge)
+    # Create valueBox for total patient count
+    valueBox(
+      value = format(total_charges_formatted, big.mark = ".", decimal.mark = ","),
+      subtitle = "Total Charge",
+      icon = icon("dollar-sign"),
+      color = "teal"
+    )
+  })
+
+#______________________________________________________________________________  
+  output$age_group_chart_hist <- renderPlot({
+    selected_data <- filter(ny_hospdata, Hospital.Service.Area == input$area_patient)
     
-    # Return the data frame to display in the table
-    patient_count
+    # Prepare the data for Age Group
+    age_group_data <-     selected_data %>%
+      group_by(Age.Group) %>%
+      summarise(Count = n())
+    
+    # Define gradient colors for bar chart
+    colors <- c("#1f9d9b", "#24848a", "#1c5c8b", "#4b3f7d", "#6e4d85")
+    
+    # Create the bar chart (age group count)
+    p1 <- ggplot(age_group_data, aes(x = Count, y = Age.Group, fill = Count)) +
+      geom_bar(stat = "identity", color = "black", show.legend = FALSE, width = 0.5, 
+               size = 0.1, linetype = "solid", alpha = 0.8) +  # Adjust the width and transparency of the bars
+      scale_fill_gradientn(colors = colors) +  # Apply the gradient colors
+      geom_text(aes(label = Count), hjust = -0.09, color = "black", size = 4) +  # Add labels at the end of the bars
+      theme_minimal(base_size = 15) +
+      theme(
+        axis.text.y = element_text(angle = 0, hjust = .5, margin = margin(r = -25)),
+        plot.background = element_rect(fill = "lightgray", color = "white",size = 1),  # Set background color for the plot area
+        panel.grid = element_blank(),  # Remove grid lines
+        axis.title = element_blank(),  # Remove axis titles
+        plot.title = element_blank(),  # Remove plot title
+        axis.text.x = element_blank()  # Remove x-axis labels
+      ) + labs(title = "Count of Total Patients by Age Group") + 
+      scale_x_continuous(expand = c(0, 8000))  # Increase space at the right of the bars for better visibility
+    
+    # Prepare the data for Pie Chart (Total Charges by Age Group)
+    total_charges_by_group <- data.frame(
+      Category = c("0-17","18–29", "30–49", "50–69", "70+"),
+      Total_Charges = c(
+        sum(as.numeric(gsub(",", "",     selected_data$Total.Charges[    selected_data$Age.Group == "0 to 17"])), na.rm = TRUE),
+        sum(as.numeric(gsub(",", "",     selected_data$Total.Charges[    selected_data$Age.Group == "18 to 29"])), na.rm = TRUE),
+        sum(as.numeric(gsub(",", "",     selected_data$Total.Charges[    selected_data$Age.Group == "30 to 49"])), na.rm = TRUE),
+        sum(as.numeric(gsub(",", "",     selected_data$Total.Charges[    selected_data$Age.Group == "50 to 69"])), na.rm = TRUE),
+        sum(as.numeric(gsub(",", "",     selected_data$Total.Charges[    selected_data$Age.Group == "70 or Older"])), na.rm = TRUE)
+      )
+    )
+    
+    # Calculate the total charges
+    total_charges_all <- sum(total_charges_by_group$Total_Charges)
+    
+    # Calculate the percentage for each category
+    total_charges_by_group$Percentage <- round(total_charges_by_group$Total_Charges / total_charges_all * 100, 1)
+    
+    # Pie chart for total charges percentage
+    p2 <- ggplot(total_charges_by_group, aes(x = "", y = Percentage, fill = Category)) +  # Use Category for fill
+      geom_bar(stat = "identity", width = 1, color = "black") +
+      coord_polar(theta = "y") +  # Makes it a pie chart
+      scale_fill_manual(values = colors) +  # Apply the custom colors to each category
+      theme_void() +  # Remove gridlines and background
+      theme(
+        plot.background = element_rect(fill = "lightgray", color = "white", size = .5),  # Set background color for the plot area
+        legend.position = "bottom",  # Move legend to the right
+        legend.margin = margin(10, 10, 10, 10),  # Add margin around the legend
+        plot.title = element_text(hjust = 0.5, vjust = -2),  # Center the title
+        plot.title.position = "plot",  # Ensure the title stays within the plot area
+        legend.title = element_blank(),  # Remove legend title
+        legend.text = element_text(size = 16)  # Adjust the size of legend text for readability
+      ) +
+      labs(title = "Percentage of Total Charges by Age Group")
+    
+    # Third Pie Chart (same as p2)
+    p3 <- ggplot(age_group_data, aes(x = Age.Group, y = Count, fill = Count)) +
+      geom_bar(stat = "identity", color = "black", show.legend = FALSE, width = 0.5, 
+               size = 0.1, linetype = "solid", alpha = 0.8) +  # Adjust the width and transparency of the bars
+      scale_fill_gradientn(colors = colors) +  # Apply the gradient colors
+      geom_text(aes(label = Count), vjust = -0.5, color = "black", size = 4) +  # Add labels at the top of the bars
+      theme_minimal(base_size = 15) +
+      theme(
+        axis.text.x = element_text(angle = 90, vjust = 0),  # Rotate x-axis labels for better visibility
+        plot.background = element_rect(fill = "lightgray", color = "white", size = 1),  # Set background color for the plot area
+        panel.grid = element_blank(),  # Remove grid lines
+        axis.title = element_blank(),  # Remove axis titles
+        plot.title = element_blank(),  # Remove plot title
+        axis.text.y = element_blank()  # Remove y-axis labels
+      ) + labs(title = "Count of Total Patients by Age Group") + 
+      scale_y_continuous(expand = c(0, 8000))  
+    
+    gridExtra::grid.arrange(p1, p2, p3, ncol = 3)# Add padding between plots
   })
   
-  # Render the total patient count for the selected service area
-  output$total_patient_count <- renderText({
+  
+#_____________________________________________________________________________
+    output$severity_chart_hist <- renderPlot({
+      
+          selected_data <- filter(ny_hospdata, Hospital.Service.Area == input$area)
+      
+      severity_data <-     selected_data %>%
+        group_by(APR.Severity.of.Illness.Description) %>%
+        summarise(Count = n())
+      # Define the color gradient you want (from your image)
+      colors <- c("#1f9d9b", "#24848a", "#1c5c8b", "#4b3f7d", "#6e4d85")
+      
+      p1 <- ggplot(severity_data, aes(x = Count, y = APR.Severity.of.Illness.Description, fill = Count)) +
+        geom_bar(stat = "identity", color = "black", show.legend = FALSE) +
+        scale_fill_gradientn(colors = colors) +  # Apply the gradient colors
+        geom_text(aes(label = Count), hjust = -0.05, color = "black", size = 5) +  # Place labels at the end of bars
+        theme_minimal(base_size = 20) +
+        theme(
+          axis.text.y = element_text(angle = 0, hjust = 1, margin = margin(r = -25)),  # Adjust margin on the right
+          panel.grid = element_blank(),  # Remove grid lines
+          axis.title = element_blank(),  # Remove axis titles
+          plot.title = element_blank(),  # Remove plot title
+          axis.text.x = element_blank()  # Hide horizontal x-axis numbers
+        ) +
+        scale_x_continuous(expand = c(0, 5000))  # Increase space at the right (500 is adjustable)
+      
+      
+      # Pie Chart: Percentage of Total Charges
+      total_charges_by_group_s <- data.frame(
+        Category = c("Extreme", "Major", "Minor", "Moderate"),
+        Total_Charges = c(
+          sum(as.numeric(gsub(",", "",     selected_data$Total.Charges[    selected_data$APR.Severity.of.Illness.Description == "Extreme"])), na.rm = TRUE),
+          sum(as.numeric(gsub(",", "",     selected_data$Total.Charges[    selected_data$APR.Severity.of.Illness.Description == "Major"])), na.rm = TRUE),
+          sum(as.numeric(gsub(",", "",     selected_data$Total.Charges[    selected_data$APR.Severity.of.Illness.Description == "Minor"])), na.rm = TRUE),
+          sum(as.numeric(gsub(",", "",     selected_data$Total.Charges[    selected_data$APR.Severity.of.Illness.Description == "Moderate"])), na.rm = TRUE)
+        )
+      )
+      total_charges_all <- sum(total_charges_by_group_s$Total_Charges)  # Total charges for all groups
+      
+      # Calculate percentage for each category
+      total_charges_by_group_s$Percentage <- round(total_charges_by_group_s$Total_Charges / total_charges_all * 100, 1)
+      
+      # Pie chart for total charges percentage
+      p2 <- ggplot(total_charges_by_group_s, aes(x = "", y = Percentage, fill = Category)) +
+        geom_bar(stat = "identity", width = 1, color = "black") +
+        coord_polar(theta = "y") +  # Makes it a pie chart
+        scale_fill_brewer(palette = "Set3") +   # Use a better color palette
+        theme_void() +  # Remove gridlines and background
+        theme(legend.position = "right")  +  # Move legend to the right
+        labs(title = "Percentage of Total Charges by Severity") +  # Add the title
+        theme(plot.title = element_text(hjust = .5, vjust = -7)) 
+      
+      gridExtra::grid.arrange(p1, p2, ncol = 2)
+      
+    })
     
-    # Filter the data for the selected area
-    selected_area_data <- filter(ny_hospdata, Hospital.Service.Area == input$area_patient)
-    
-    # Count the total number of patients in the selected service area
-    total_patient_count <- nrow(selected_area_data)
-    
-    # Return the total patient count as text
-    paste("Total number of patients in", input$area_patient, "is:", total_patient_count)
-  })
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
   
   # Render the surgical frequency table
   output$surgical_frequency_table <- renderTable({
