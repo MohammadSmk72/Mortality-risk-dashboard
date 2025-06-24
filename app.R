@@ -29,6 +29,9 @@ ui <- dashboardPage(
   # Body of the dashboard
   dashboardBody(
     tags$style(HTML("
+      body {
+        background-color: #D4D9DD;  /* Light grayish-blue background */
+      }
       .table, .table th, .table td {
         text-align: center;  /* Center content in the table */
         vertical-align: middle;  /* Vertically align text in the center */
@@ -41,6 +44,7 @@ ui <- dashboardPage(
         font-weight: bold; /* Make the text bold */
         color: #2c3e50;  /* Set a dark color for better readability */
       }
+      
     ")),
   
     
@@ -934,7 +938,7 @@ server <- function(input, output, session) {
       value = format(total, big.mark = ".", decimal.mark = ","),
       subtitle = "Patients",
       icon = icon("user"),
-      color = "teal"
+      color = "light-blue"
     )
   })
   output$total_charge_count <- renderValueBox({
@@ -950,7 +954,7 @@ server <- function(input, output, session) {
       value = format(total_charges_formatted, big.mark = ".", decimal.mark = ","),
       subtitle = "Total Charge",
       icon = icon("dollar-sign"),
-      color = "teal"
+      color = "green"
     )
   })
 
@@ -965,64 +969,64 @@ server <- function(input, output, session) {
       summarise(Count = n())
     
     # Define gradient colors for bar chart
-    colors <- c("#1f9d9b", "#24848a", "#1c5c8b", "#4b3f7d", "#6e4d85")
+    colors <- c('#5e6eed')
     
     # Create the bar chart (age group count)
     p1 <- ggplot(age_group_data, aes(x = Count, y = Age.Group, fill = Count)) +
-      geom_bar(stat = "identity", color = "black", show.legend = FALSE, width = 0.5, 
+      geom_bar(stat = "identity", color = "black", show.legend = FALSE, width = 0.4, 
                size = 0.1, linetype = "solid", alpha = 0.8) +  # Adjust the width and transparency of the bars
       scale_fill_gradientn(colors = colors) +  # Apply the gradient colors
-      geom_text(aes(label = Count), hjust = -0.09, color = "black", size = 4) +  # Add labels at the end of the bars
+      geom_text(aes(label = Count), hjust = .5, color = "black", size = 4,nudge_x =0,  # Add a horizontal margin (space to the right of the labels)
+                nudge_y = .35) +  # Add labels at the end of the bars
       theme_minimal(base_size = 15) +
+      ggtitle("Total Count of Patients by Age Group") +
       theme(
-        axis.text.y = element_text(angle = 0, hjust = .5, margin = margin(r = -25)),
-        plot.background = element_rect(fill = "lightgray", color = "white",size = 1),  # Set background color for the plot area
+        axis.text.y = element_text(angle = 0, hjust = 1.2),
+        plot.background = element_rect(fill = "#F1F2F6", color = "white",size = 5),  # Set background color for the plot area
         panel.grid = element_blank(),  # Remove grid lines
         axis.title = element_blank(),  # Remove axis titles
         plot.title = element_blank(),  # Remove plot title
         axis.text.x = element_blank()  # Remove x-axis labels
-      ) + labs(title = "Count of Total Patients by Age Group") + 
-      scale_x_continuous(expand = c(0, 8000))  # Increase space at the right of the bars for better visibility
+      )  
     
-
     # Second Bar Chart (same as p2)
-    
     age_group_data_gender <- selected_data %>%
       group_by(Age.Group, Gender) %>%
       summarise(Count = n(), .groups = 'drop')  # Summarize by Age Group and Gender
     
-    # Create a stacked bar chart
+    # Define the colors for the Gender categories
+    colors_p <- c("#ff0854","#1a55ec")
+    
+    # Create the bar chart with the specified colors
     p2 <- ggplot(age_group_data_gender, aes(x = Age.Group, y = Count, fill = Gender)) +  # Fill by Gender
       geom_bar(stat = "identity", color = "black", position = "dodge", width = 0.7, 
                size = 0.1, linetype = "solid", alpha = 0.8) +  # Stacked bars for each gender (side-by-side)
-      scale_fill_manual(values = colors) +  # Use the defined colors for the bars
+      scale_fill_manual(values = colors_p) +  # Use the defined colors for the bars
       geom_text(aes(label = Count), position = position_dodge(width = 0.7), vjust = -0.5, color = "black", size = 4) +  # Add labels at the top of the bars
       theme_minimal(base_size = 15) +
       theme(
-        axis.text.x = element_text(angle = 90, vjust = 0),  # Rotate x-axis labels for better visibility
-        plot.background = element_rect(fill = "lightgray", color = "white", size = 1),  # Set background color for the plot area
+        axis.text.x = element_text(angle = 0, vjust = 5),  # Rotate x-axis labels for better visibility
+        plot.background = element_rect(fill = "#F1F2F6", color = "white", size = 5),  # Set background color for the plot area
         panel.grid = element_blank(),  # Remove grid lines
         axis.title = element_blank(),  # Remove axis titles
         plot.title = element_blank(),  # Remove plot title
         axis.text.y = element_blank()  # Remove y-axis labels
-      ) +
-      labs(title = "Count of Total Patients by Age Group and Gender") + 
-      scale_y_continuous(expand = c(0, 8000))  # Adjust space at the top of the bars for better visibility
-    
+      )
     
     gridExtra::grid.arrange(p1, p2, ncol = 2)# Add padding between plots
   })
   
+#----------------------------------------------------------------------Pie Chart
   output$age_group_chart_pie <- renderPlot({
     selected_data <- filter(ny_hospdata, Hospital.Service.Area == input$area_patient)
     
     # Prepare the data for Age Group
-    age_group_data <-     selected_data %>%
+    age_group_data <- selected_data %>%
       group_by(Age.Group) %>%
       summarise(Count = n())
     
     # Define gradient colors for bar chart
-    colors <- c("#1f9d9b", "#24848a", "#1c5c8b", "#4b3f7d", "#6e4d85")
+    colors <- c("green", "lightblue", "#5e6eed", "#ff0854","#1a55ec")
     
     # Prepare the data for Pie Chart (Total Charges by Age Group)
     total_charges_by_group <- data.frame(
@@ -1042,55 +1046,51 @@ server <- function(input, output, session) {
     # Calculate the percentage for each category
         total_charges_by_group$Percentage <- round(total_charges_by_group$Total_Charges / total_charges_all * 100, 1)
     
-    # Pie chart for total charges percentage
-       p1 <- ggplot(total_charges_by_group, aes(x = "", y = Percentage, fill = Category)) +  # Use Category for fill
-          geom_bar(stat = "identity", width = 1, color = "black") +
+        p1 <- ggplot(total_charges_by_group, aes(x = "", y = Percentage, fill = Category)) +  # Use Category for fill
+          geom_bar(stat = "identity", width = 5, color = "black") +
           coord_polar(theta = "y") +  # Makes it a pie chart
           scale_fill_manual(values = colors) +  # Apply the custom colors to each category
           theme_void() +  # Remove gridlines and background
           theme(
-            plot.background = element_rect(fill = "lightgray", color = "white", size = .5),  # Set background color for the plot area
-            legend.position = "right",  # Move legend to the right
-            legend.margin = margin(10, 10, 10, 10),  # Add margin around the legend
-            plot.title = element_text(hjust = 0.5, vjust = -2),  # Center the title
+            plot.background = element_rect(fill = "#F1F2F6", color = "white", size = 10),  # Set background color for the plot area
+            legend.position = "none",  # Hide the legend
+            plot.title = element_text(hjust = 0.5, vjust = -1),  # Center the title
             plot.title.position = "plot",  # Ensure the title stays within the plot area
-            legend.title = element_blank(),  # Remove legend title
-            legend.text = element_text(size = 16)  # Adjust the size of legend text for readability
+            legend.title = element_blank(),  # Remove legend title (if needed)
+            legend.text = element_text(size = 14)  # Adjust the size of legend text (if needed)
           ) +
           labs(title = "Percentage of Total Charges by Age Group")
-       
+        
        p2 <- ggplot(total_charges_by_group, aes(x = "", y = Percentage, fill = Category)) +  # Use Category for fill
-         geom_bar(stat = "identity", width = 1, color = "black") +
+         geom_bar(stat = "identity", width = 5, color = "black") +
          coord_polar(theta = "y") +  # Makes it a pie chart
          scale_fill_manual(values = colors) +  # Apply the custom colors to each category
          theme_void() +  # Remove gridlines and background
          theme(
-           plot.background = element_rect(fill = "lightgray", color = "white", size = .5),  # Set background color for the plot area
-           legend.position = "right",  # Move legend to the right
-           legend.margin = margin(10, 10, 10, 10),  # Add margin around the legend
-           plot.title = element_text(hjust = 0.5, vjust = -2),  # Center the title
+           plot.background = element_rect(fill = "#F1F2F6", color = "white", size = 10),  # Set background color for the plot area
+           legend.position = "none",  # Hide the legend
+           plot.title = element_text(hjust = 0.5, vjust = -1),  # Center the title
            plot.title.position = "plot",  # Ensure the title stays within the plot area
-           legend.title = element_blank(),  # Remove legend title
-           legend.text = element_text(size = 16)  # Adjust the size of legend text for readability
+           legend.title = element_blank(),  # Remove legend title (if needed)
+           legend.text = element_text(size = 14)  # Adjust the size of legend text (if needed)
          ) +
          labs(title = "Percentage of Total Charges by Age Group")
        
        p3 <- ggplot(total_charges_by_group, aes(x = "", y = Percentage, fill = Category)) +  # Use Category for fill
-         geom_bar(stat = "identity", width = 1, color = "black") +
+         geom_bar(stat = "identity", width = 5, color = "black") +
          coord_polar(theta = "y") +  # Makes it a pie chart
          scale_fill_manual(values = colors) +  # Apply the custom colors to each category
          theme_void() +  # Remove gridlines and background
          theme(
-           plot.background = element_rect(fill = "lightgray", color = "white", size = .5),  # Set background color for the plot area
-           legend.position = "right",  # Move legend to the right
-           legend.margin = margin(10, 10, 10, 10),  # Add margin around the legend
-           plot.title = element_text(hjust = 0.5, vjust = -2),  # Center the title
+           plot.background = element_rect(fill = "#F1F2F6", color = "white", size = 10),  # Set background color for the plot area
+           legend.position = "none",  # Hide the legend
+           plot.title = element_text(hjust = 0.5, vjust = -1),  # Center the title
            plot.title.position = "plot",  # Ensure the title stays within the plot area
-           legend.title = element_blank(),  # Remove legend title
-           legend.text = element_text(size = 16)  # Adjust the size of legend text for readability
+           legend.title = element_blank(),  # Remove legend title (if needed)
+           legend.text = element_text(size = 14)  # Adjust the size of legend text (if needed)
          ) +
          labs(title = "Percentage of Total Charges by Age Group")
- 
+       
     gridExtra::grid.arrange(p1, p2, p3, ncol = 3)# Add padding between plots
   })
   
@@ -1119,7 +1119,7 @@ server <- function(input, output, session) {
         group_by(APR.Severity.of.Illness.Description) %>%
         summarise(Count = n())
       # Define the color gradient you want (from your image)
-      colors <- c("#1f9d9b", "#24848a", "#1c5c8b", "#4b3f7d", "#6e4d85")
+      colors <- c("green", "light-blue", "#5e6eed", "#4b3f7d", "#6e4d85")
       
       p1 <- ggplot(severity_data, aes(x = Count, y = APR.Severity.of.Illness.Description, fill = Count)) +
         geom_bar(stat = "identity", color = "black", show.legend = FALSE) +
